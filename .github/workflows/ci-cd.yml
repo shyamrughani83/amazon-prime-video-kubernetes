@@ -12,6 +12,13 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
       
+    - name: Generate version tag
+      id: version
+      run: |
+        VERSION=v$(date +%Y%m%d%H%M%S)
+        echo "tag=$VERSION" >> $GITHUB_OUTPUT
+        echo "Generated version: $VERSION"
+      
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v3
       
@@ -26,5 +33,19 @@ jobs:
       with:
         context: .
         push: true
-        tags: ${{ secrets.DOCKER_USERNAME }}/amazon-prime-video:latest
+        tags: |
+          ${{ secrets.DOCKER_USERNAME }}/amazon-prime-video:latest
+          ${{ secrets.DOCKER_USERNAME }}/amazon-prime-video:${{ steps.version.outputs.tag }}
         no-cache: true
+        
+    - name: Update Kubernetes manifest
+      run: |
+        sed -i "s|image: shyamr30/amazon-prime-video.*|image: shyamr30/amazon-prime-video:${{ steps.version.outputs.tag }}|g" kubernetes/manifest.yml
+        
+    - name: Commit updated manifest
+      run: |
+        git config --local user.email "action@github.com"
+        git config --local user.name "GitHub Action"
+        git add kubernetes/manifest.yml
+        git commit -m "Update image tag to ${{ steps.version.outputs.tag }}" || exit 0
+        git push
